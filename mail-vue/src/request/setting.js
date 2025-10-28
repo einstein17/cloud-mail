@@ -16,6 +16,10 @@ export function setBackground(background) {
     return http.put('/setting/setBackground',{background})
 }
 
+export function clearForwardRules() {
+    return http.delete('/setting/clearForwardRules')
+}
+
 export function physicsDeleteAll() {
     return http.delete('/setting/physicsDeleteAll')
 }

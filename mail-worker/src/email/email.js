@@ -27,8 +27,7 @@ export async function email(message, env, ctx) {
 			tgBotStatus,
 			forwardStatus,
 			forwardEmail,
-			ruleEmail,
-			ruleType,
+			forwardRules,
 			r2Domain,
 			noRecipient
 		} = await settingService.query({ env });
@@ -154,15 +153,7 @@ export async function email(message, env, ctx) {
 		emailRow = await emailService.completeReceive({ env }, account ? emailConst.status.RECEIVE : emailConst.status.NOONE, emailRow.emailId);
 
 
-		if (ruleType === settingConst.ruleType.RULE) {
-
-			const emails = ruleEmail.split(',');
-
-			if (!emails.includes(message.to)) {
-				return;
-			}
-
-		}
+		// 旧版转发规则逻辑已移除，现在使用forwardRules系统
 
 
 		if (tgBotStatus === settingConst.tgBotStatus.OPEN && tgChatId) {
@@ -200,6 +191,29 @@ ${params.text || emailUtils.htmlToText(params.content) || ''}
 			}));
 		}
 
+		if (forwardRules) {
+			try {
+				// 确保rules是数组格式（处理可能的格式不一致情况）
+				const rules = Array.isArray(forwardRules) ? forwardRules : (typeof forwardRules === 'string' ? JSON.parse(forwardRules) : []);
+				if (Array.isArray(rules)) {
+					await Promise.all(rules.map(async rule => {
+						if (rule.enabled) {
+							try {
+								const regex = new RegExp(rule.pattern);
+								if (regex.test(message.to)) {
+									await message.forward(rule.targetEmail);
+								}
+							} catch (e) {
+								console.error(`处理转发规则失败: ${rule.name || '未命名规则'}, 目标邮箱: ${rule.targetEmail}, 表达式: ${rule.pattern}`, e);
+							}
+						}
+					}));
+				}
+			} catch (e) {
+				console.error('解析转发规则失败:', e);
+			}
+		}
+		      // Keep existing forward logic for backward compatibility if needed, otherwise remove.
 		if (forwardStatus === settingConst.forwardStatus.OPEN && forwardEmail) {
 
 			const emails = forwardEmail.split(',');

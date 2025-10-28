@@ -22,6 +22,8 @@ app.put('/setting/setBackground', async (c) => {
 	return c.json(result.ok(key));
 });
 
+// 转发规则清除API已移除，因为功能不再使用
+
 app.delete('/setting/physicsDeleteAll', async (c) => {
 	await settingService.physicsDeleteAll(c);
 	return c.json(result.ok());

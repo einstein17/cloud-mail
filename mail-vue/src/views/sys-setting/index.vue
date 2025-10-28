@@ -233,7 +233,6 @@
               <div class="setting-item">
                 <div><span>{{$t('forwardingRules')}}</span></div>
                 <div class="forward">
-                  <span>{{ setting.ruleType === 0 ? $t('forwardAll') : $t('rules') }}</span>
                   <el-button class="opt-button" size="small" type="primary" @click="openForwardRules">
                     <Icon icon="fluent:settings-48-regular" width="18" height="18"/>
                   </el-button>
@@ -495,6 +494,7 @@
       <el-dialog
           v-model="forwardRulesShow"
           class="forward-dialog"
+          width="800px"
       >
         <template #header>
             <div class="forward-head">
@@ -504,18 +504,66 @@
               </el-tooltip>
             </div>
         </template>
-        <div class="forward-set-body">
-          <el-input-tag :placeholder="$t('ruleEmailsInputDesc')" tag-type="success" v-model="ruleEmail" @add-tag="ruleEmailAddTag" />
+        <div class="forward-rules-body">
+          <div class="rules-header">
+            <el-button type="primary" @click="openForwardRuleForm(false)">
+              <Icon icon="material-symbols:add-rounded" width="16" height="16"/>
+              {{$t('addRule')}}
+            </el-button>
+          </div>
+          <el-table :data="forwardRulesList" style="width: 100%" :empty-text="$t('noRules')">
+            <el-table-column prop="name" :label="$t('ruleName')" width="150" />
+            <el-table-column prop="pattern" :label="$t('pattern')" width="200" :show-overflow-tooltip="true" />
+            <el-table-column prop="targetEmail" :label="$t('targetEmail')" width="200" :show-overflow-tooltip="true" />
+            <el-table-column :label="$t('status')" width="100">
+              <template #default="scope">
+                <el-switch
+                  v-model="scope.row.enabled"
+                  disabled
+                />
+              </template>
+            </el-table-column>
+            <el-table-column :label="$t('actions')" width="150">
+              <template #default="scope">
+                <el-button size="small" @click="openForwardRuleForm(true, scope.row)">
+                  <Icon icon="lsicon:edit-outline" width="14" height="14"/>
+                </el-button>
+                <el-button size="small" type="danger" @click="removeForwardingRule(scope.row.id)">
+                  <Icon icon="material-symbols:delete-outline-rounded" width="14" height="14"/>
+                </el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+        </div>
+      </el-dialog>
+
+      <!-- Forward Rule Form Dialog -->
+      <el-dialog
+          v-model="forwardRuleFormShow"
+          :title="isEditRule ? $t('editRule') : $t('addRule')"
+          width="500px"
+      >
+        <div class="rule-form-body">
+          <el-form :model="forwardRuleForm" label-width="100px">
+            <el-form-item :label="$t('ruleName')" required>
+              <el-input v-model="forwardRuleForm.name" :placeholder="$t('ruleNamePlaceholder')" />
+            </el-form-item>
+            <el-form-item :label="$t('pattern')" required>
+              <el-input v-model="forwardRuleForm.pattern" :placeholder="$t('patternPlaceholder')" />
+              <div class="form-tip">{{$t('regexTip')}}</div>
+            </el-form-item>
+            <el-form-item :label="$t('targetEmail')" required>
+              <el-input v-model="forwardRuleForm.targetEmail" :placeholder="$t('emailPlaceholder')" />
+            </el-form-item>
+            <el-form-item :label="$t('enabled')">
+              <el-switch v-model="forwardRuleForm.enabled" />
+            </el-form-item>
+          </el-form>
         </div>
         <template #footer>
           <div class="dialog-footer">
-            <el-radio-group v-model="ruleType">
-              <el-radio :value="0" >{{$t('forwardAll')}}</el-radio>
-              <el-radio :value="1" >{{$t('rules')}}</el-radio>
-            </el-radio-group>
-            <el-button :loading="settingLoading" type="primary" @click="ruleEmailSave">
-              {{$t('save')}}
-            </el-button>
+            <el-button @click="forwardRuleFormShow = false">{{$t('cancel')}}</el-button>
+            <el-button type="primary" @click="saveForwardRule">{{$t('save')}}</el-button>
           </div>
         </template>
       </el-dialog>
@@ -615,7 +663,7 @@
 
 <script setup>
 import {computed, defineOptions, reactive, ref} from "vue";
-import {physicsDeleteAll, setBackground, settingQuery, settingSet} from "@/request/setting.js";
+import {clearForwardRules, physicsDeleteAll, setBackground, settingQuery, settingSet} from "@/request/setting.js";
 import {useSettingStore} from "@/store/setting.js";
 import {useUiStore} from "@/store/ui.js";
 import {useUserStore} from "@/store/user.js";
@@ -673,6 +721,21 @@ const turnstileForm = reactive({
   secretKey: ''
 })
 
+
+
+const forwardRulesList = ref([])
+const forwardRuleFormShow = ref(false)
+const isEditRule = ref(false)
+const currentEditRuleIndex = ref(-1)
+
+const forwardRuleForm = reactive({
+  id: '',
+  name: '',
+  pattern: '',
+  targetEmail: '',
+  enabled: true,
+})
+
 const noticeForm = reactive({
   noticeTitle: '',
   noticeContent: '',
@@ -683,7 +746,6 @@ const noticeForm = reactive({
   notice: 0,
   noticeWidth: 0
 })
-
 const regKeyOptions = computed(() => [
   {label: t('enable'), value: 0},
   {label: t('disable'), value: 1},
@@ -707,13 +769,11 @@ const forwardEmail = ref([])
 const forwardStatus = ref(0)
 const emailColumnWidth = ref(0)
 const tokenColumnWidth = ref(0)
-const ruleType = ref(0)
-const ruleEmail = ref([])
-
 getSettings()
 
 function getSettings() {
   settingQuery().then(settingData => {
+    console.log('Setting Data:', settingData);
     setting.value = settingData
     settingStore.domainList = settingData.domainList;
     resendTokenForm.domain = setting.value.domainList[0]
@@ -732,6 +792,29 @@ function getSettings() {
     noticeForm.noticeType = setting.value.noticeType
     noticeForm.noticeOffset = setting.value.noticeOffset
     noticeForm.noticeWidth = setting.value.noticeWidth
+    forwardRulesList.value = setting.value.forwardRules
+    console.log('forwardRulesList.value:', forwardRulesList.value)
+    try {
+      // 检查forwardRules的类型，避免重复解析
+      if (!setting.value.forwardRules) {
+        forwardRulesList.value = []
+      } else if (Array.isArray(setting.value.forwardRules)) {
+        forwardRulesList.value = setting.value.forwardRules
+      } else if (typeof setting.value.forwardRules === 'string') {
+        try {
+          forwardRulesList.value = JSON.parse(setting.value.forwardRules)
+        } catch (error) {
+          console.error('Error parsing forward rules:', error)
+          forwardRulesList.value = []
+        }
+      } else {
+        // 如果是对象但不是数组，转换为数组或设为空数组
+        forwardRulesList.value = []
+      }
+    } catch (error) {
+      console.error('Error parsing forward rules in getSettings:', error)
+      forwardRulesList.value = []
+    }
   })
 }
 
@@ -853,41 +936,92 @@ function openThirdEmailSetting() {
 }
 
 function openForwardRules() {
-  ruleType.value = setting.value.ruleType
-  ruleEmail.value = []
-  if (setting.value.ruleEmail) {
-    const list = setting.value.ruleEmail.split(',')
-    ruleEmail.value.push(...list)
+  try {
+    // 检查forwardRules的类型，避免重复解析
+    if (!setting.value.forwardRules) {
+      forwardRulesList.value = []
+    } else if (Array.isArray(setting.value.forwardRules)) {
+      forwardRulesList.value = setting.value.forwardRules
+    } else if (typeof setting.value.forwardRules === 'string') {
+      try {
+        forwardRulesList.value = JSON.parse(setting.value.forwardRules)
+      } catch (error) {
+        console.error('Error parsing forward rules:', error)
+        forwardRulesList.value = []
+      }
+    } else {
+      // 如果是对象但不是数组，转换为数组或设为空数组
+      forwardRulesList.value = []
+    }
+  } catch (error) {
+    console.error('Error parsing forward rules:', error)
+    forwardRulesList.value = []
   }
   forwardRulesShow.value = true
 }
 
-function emailAddTag(val) {
-  const emails = Array.from(new Set(
-      val.split(/[,，]/).map(item => item.trim()).filter(item => item)
-  ));
-
-  forwardEmail.value.splice(forwardEmail.value.length - 1, 1)
-
-  emails.forEach(email => {
-    if (isEmail(email) && !forwardEmail.value.includes(email)) {
-      forwardEmail.value.push(email)
-    }
-  })
+function openForwardRuleForm(edit = false, rule = {}) {
+  forwardRuleFormShow.value = true
+  isEditRule.value = edit
+  if (edit) {
+    Object.assign(forwardRuleForm, rule)
+    currentEditRuleIndex.value = forwardRulesList.value.findIndex(r => r.id === rule.id)
+  } else {
+    forwardRuleForm.id = Date.now().toString()
+    forwardRuleForm.name = ''
+    forwardRuleForm.pattern = ''
+    forwardRuleForm.targetEmail = ''
+    forwardRuleForm.enabled = true
+  }
 }
 
-function ruleEmailAddTag(val) {
-  const emails = Array.from(new Set(
-      val.split(/[,，]/).map(item => item.trim()).filter(item => item)
-  ));
+function saveForwardRule() {
+  if (!forwardRuleForm.name || !forwardRuleForm.pattern || !forwardRuleForm.targetEmail) {
+    ElMessage.error(t('ruleFormEmpty'))
+    return
+  }
+  try {
+    new RegExp(forwardRuleForm.pattern)
+  } catch (e) {
+    ElMessage.error(t('invalidRegExp'))
+    return
+  }
+  if (!isEmail(forwardRuleForm.targetEmail)) {
+    ElMessage.error(t('invalidEmail'))
+    return
+  }
 
-  ruleEmail.value.splice(ruleEmail.value.length - 1, 1)
+  if (isEditRule.value) {
+    forwardRulesList.value[currentEditRuleIndex.value] = { ...forwardRuleForm }
+  } else {
+    forwardRulesList.value.push({ ...forwardRuleForm })
+  }
+  forwardRuleFormShow.value = false
+  saveForwardRulesToBackend()
+}
 
-  emails.forEach(email => {
-    if (isEmail(email) && !ruleEmail.value.includes(email)) {
-      ruleEmail.value.push(email)
+function removeForwardingRule(id) {
+  ElMessageBox.confirm(t('confirmDeleteRule'), t('warning'), {
+    confirmButtonText: t('confirm'),
+    cancelButtonText: t('cancel'),
+    type: 'warning',
+  }).then(() => {
+    const index = forwardRulesList.value.findIndex(rule => rule.id === id)
+    if (index !== -1) {
+      forwardRulesList.value.splice(index, 1)
+      saveForwardRulesToBackend()
+      ElMessage.success(t('deleteSuccess'))
     }
-  })
+  }).catch(() => {})
+}
+
+function toggleRuleEnabled(rule) {
+  rule.enabled = !rule.enabled
+  saveForwardRulesToBackend()
+}
+
+function saveForwardRulesToBackend() {
+  editSetting({ forwardRules: forwardRulesList.value })
 }
 
 function addChatTag(val) {
@@ -923,13 +1057,6 @@ function forwardEmailSave() {
 }
 
 
-function ruleEmailSave() {
-  const form = {
-    ruleEmail: ruleEmail.value + '',
-    ruleType: ruleType.value
-  }
-  editSetting(form)
-}
 
 function doOpacityChange() {
   const form = {}
@@ -941,6 +1068,8 @@ const opacityChange = debounce(doOpacityChange, 1000, {
   leading: false,
   trailing: true
 })
+
+
 
 function physicsDeleteAllData() {
   ElMessageBox.prompt(t('clearAllDelConfirm'), {
@@ -1110,7 +1239,11 @@ function editSetting(settingForm, refreshStatus = true) {
     turnstileShow.value = false
     tgSettingShow.value = false
     thirdEmailShow.value = false
-    forwardRulesShow.value = false
+    // 只有当不是保存转发规则时才关闭弹窗
+    if (!settingForm.forwardRules) {
+      forwardRulesShow.value = false
+    }
+    forwardRuleFormShow.value = false
     addVerifyCountShow.value = false
     regVerifyCountShow.value = false
     noticePopupShow.value = false
@@ -1328,8 +1461,8 @@ function editSetting(settingForm, refreshStatus = true) {
 
 
 :deep(.forward-dialog.el-dialog) {
-  width: 500px !important;
-  @media (max-width: 540px) {
+  width: 900px !important;
+  @media (max-width: 940px) {
     width: calc(100% - 40px) !important;
     margin-right: 20px !important;
     margin-left: 20px !important;
@@ -1395,6 +1528,36 @@ function editSetting(settingForm, refreshStatus = true) {
   gap: 15px;
   .el-switch {
     align-self: end;
+  }
+}
+
+.forward-rules-body {
+  .rules-header {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 15px;
+  }
+
+  .el-table {
+    :deep(.el-table__cell) {
+      padding: 8px 0;
+    }
+  }
+}
+
+.rule-form-body {
+  .el-form-item {
+    margin-bottom: 20px;
+
+    .el-input {
+      width: 100%;
+    }
+  }
+
+  .form-tip {
+    font-size: 12px;
+    color: #909399;
+    margin-top: 5px;
   }
 }
 

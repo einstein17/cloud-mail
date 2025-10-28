@@ -22,7 +22,7 @@ export const setting = sqliteTable('setting', {
 	forwardEmail: text('forward_email').default('').notNull(),
 	forwardStatus: integer('forward_status').default(1).notNull(),
 	ruleEmail: text('rule_email').default('').notNull(),
-	ruleType: integer('rule_type').default(0).notNull(),
+	forwardRules: text('forward_rules').default('[]').notNull(),
 	loginOpacity: integer('login_opacity').default(0.88),
 	resendTokens: text('resend_tokens').default("{}").notNull(),
 	noticeTitle: text('notice_title').default('').notNull(),

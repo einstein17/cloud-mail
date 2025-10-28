@@ -26,7 +26,11 @@ const init = {
 	},
 
 	async v1_7DB(c) {
-		 await c.env.db.prepare(`ALTER TABLE setting ADD COLUMN login_domain INTEGER NOT NULL DEFAULT 0;`).run();
+		try {
+			await c.env.db.prepare(`ALTER TABLE setting ADD COLUMN login_domain INTEGER NOT NULL DEFAULT 0;`).run();
+		} catch (e) {
+			console.warn(`跳过字段添加，原因：${e.message}`);
+		}
 	},
 
 	async v1_6DB(c) {
@@ -167,7 +171,8 @@ const init = {
 			`ALTER TABLE setting ADD COLUMN forward_email TEXT NOT NULL DEFAULT '';`,
 			`ALTER TABLE setting ADD COLUMN forward_status INTEGER TIME NOT NULL DEFAULT 1;`,
 			`ALTER TABLE setting ADD COLUMN rule_email TEXT NOT NULL DEFAULT '';`,
-			`ALTER TABLE setting ADD COLUMN rule_type INTEGER NOT NULL DEFAULT 0;`
+			`ALTER TABLE setting ADD COLUMN rule_type INTEGER NOT NULL DEFAULT 0;`,
+			`ALTER TABLE setting ADD COLUMN forward_rules TEXT NOT NULL DEFAULT '[]';`
 		];
 
 		const promises = ADD_COLUMN_SQL_LIST.map(async (sql) => {

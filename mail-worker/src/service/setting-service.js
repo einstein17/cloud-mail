@@ -17,6 +17,17 @@ const settingService = {
 	async refresh(c) {
 		const settingRow = await orm(c).select().from(setting).get();
 		settingRow.resendTokens = JSON.parse(settingRow.resendTokens);
+		// 添加错误处理，确保即使forwardRules格式错误也能正常处理
+		try {
+			console.log('refresh forwardRules:', settingRow.forwardRules);
+			settingRow.forwardRules = JSON.parse(settingRow.forwardRules);
+		} catch (error) {
+			console.error('Error parsing forwardRules:', error);
+			// 发生错误时设置为空数组
+			settingRow.forwardRules = [];
+			// 同时更新数据库中的无效数据
+			await orm(c).update(setting).set({ forwardRules: '[]' }).run();
+		}
 		await c.env.kv.put(KvConst.SETTING, JSON.stringify(settingRow));
 	},
 
@@ -68,6 +79,31 @@ const settingService = {
 			if (!resendTokens[domain]) delete resendTokens[domain];
 		});
 		params.resendTokens = JSON.stringify(resendTokens);
+		if (params.forwardRules) { // If forwardRules exists in params, validate and stringify it
+			try {
+				// 验证forwardRules是数组格式
+				if (!Array.isArray(params.forwardRules)) {
+					console.error('forwardRules must be an array');
+					params.forwardRules = '[]';
+				} else {
+					// 验证数组中的每个规则对象都有必要的字段
+					const validRules = params.forwardRules.filter(rule => 
+						rule && 
+						typeof rule === 'object' &&
+						typeof rule.name === 'string' &&
+						typeof rule.pattern === 'string' &&
+						typeof rule.targetEmail === 'string'
+					);
+					params.forwardRules = JSON.stringify(validRules);
+				}
+			} catch (error) {
+				console.error('Error validating or stringifying forwardRules:', error);
+				// 发生错误时设置为空数组
+				params.forwardRules = '[]';
+			}
+		} else { // if not sent, make sure it is not overwritten to null
+			delete params.forwardRules;
+		}
 		await orm(c).update(setting).set({ ...params }).returning().get();
 		await this.refresh(c);
 	},
@@ -112,6 +148,8 @@ const settingService = {
 		await this.refresh(c);
 		return background;
 	},
+
+
 
 	async physicsDeleteAll(c) {
 		await emailService.physicsDeleteAll(c);
