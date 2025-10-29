@@ -183,7 +183,7 @@ const en = {
     patternPlaceholder: 'Enter regex pattern',
     targetEmail: 'Target Email',
     emailPlaceholder: 'Enter target email address',
-    regexTip: 'Supports regex, e.g.: .*@example\\.com',
+    regexTip: 'Supports regex, e.g.: .*',
     noRules: 'No rules yet',
     ruleFormEmpty: 'Please fill in complete rule information',
     invalidRegExp: 'Invalid regex pattern',

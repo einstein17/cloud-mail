@@ -185,7 +185,7 @@ const zh = {
     patternPlaceholder: '请输入正则表达式',
     targetEmail: '目标邮箱',
     emailPlaceholder: '请输入目标邮箱地址',
-    regexTip: '支持正则表达式，如：.*@example.com',
+    regexTip: '支持正则表达式，如：.*',
     noRules: '暂无规则',
     ruleFormEmpty: '请填写完整的规则信息',
     invalidRegExp: '正则表达式格式错误',
