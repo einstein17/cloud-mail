@@ -45,6 +45,17 @@ http.interceptors.response.use((res) => {
                     repeatNum: -4,
                 })
                 reject(data)
+
+            } else if (data.code === 502) {
+                ElMessage({
+                    dangerouslyUseHTMLString: true,
+                    message: data.message,
+                    type: 'error',
+                    plain: true,
+                    grouping: true,
+                    repeatNum: -4,
+                })
+                reject(data)
             } else if (data.code !== 200) {
                 ElMessage({
                     message: data.message,
@@ -59,6 +70,11 @@ http.interceptors.response.use((res) => {
         })
     },
     (error) => {
+
+        if (error.status === 403) {
+            location.reload();
+            return;
+        }
 
         const showMsg = error.config.noMsg;
 

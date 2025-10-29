@@ -28,31 +28,59 @@ const settingService = {
 			// 同时更新数据库中的无效数据
 			await orm(c).update(setting).set({ forwardRules: '[]' }).run();
 		}
+		c.set('setting', settingRow);
 		await c.env.kv.put(KvConst.SETTING, JSON.stringify(settingRow));
 	},
 
 	async query(c) {
-		const setting = await c.env.kv.get(KvConst.SETTING, { type: 'json' });
-		let domainList = c.env.domain;
-		if (typeof domainList === 'string') {
-			throw new BizError(t('notJsonDomain'));
+
+		if (c.get?.('setting')) {
+			return c.get('setting')
 		}
+
+		const setting = await c.env.kv.get(KvConst.SETTING, { type: 'json' });
+
+		let domainList = c.env.domain;
+
+		if (typeof domainList === 'string') {
+			try {
+				domainList = JSON.parse(domainList)
+			} catch (error) {
+				throw new BizError(t('notJsonDomain'));
+			}
+		}
+
+		if (!c.env.domain) {
+			throw new BizError(t('noDomainVariable'));
+		}
+
 		domainList = domainList.map(item => '@' + item);
 		setting.domainList = domainList;
+		c.set?.('setting', setting);
 		return setting;
 	},
 
-	async get(c) {
+	async get(c, showSiteKey = false) {
 
 		const [settingRow, recordList] = await Promise.all([
 			await this.query(c),
 			verifyRecordService.selectListByIP(c)
 		]);
 
+
+		if (!showSiteKey) {
+			settingRow.siteKey = settingRow.siteKey ? `${settingRow.siteKey.slice(0, 12)}******` : null;
+		}
+
 		settingRow.secretKey = settingRow.secretKey ? `${settingRow.secretKey.slice(0, 12)}******` : null;
+
 		Object.keys(settingRow.resendTokens).forEach(key => {
 			settingRow.resendTokens[key] = `${settingRow.resendTokens[key].slice(0, 12)}******`;
 		});
+
+		settingRow.s3AccessKey = settingRow.s3AccessKey ? `${settingRow.s3AccessKey.slice(0, 12)}******` : null;
+		settingRow.s3SecretKey = settingRow.s3SecretKey ? `${settingRow.s3SecretKey.slice(0, 12)}******` : null;
+		settingRow.hasR2 = !!c.env.r2
 
 		let regVerifyOpen = false
 		let addVerifyOpen = false
@@ -116,7 +144,7 @@ const settingService = {
 
 		if (background && !background.startsWith('http')) {
 
-			if (!c.env.r2) {
+			if (!await r2Service.hasOSS(c)) {
 				throw new BizError(t('noOsUpBack'));
 			}
 
@@ -131,7 +159,9 @@ const settingService = {
 
 
 			await r2Service.putObj(c, background, arrayBuffer, {
-				contentType: file.type
+				contentType: file.type,
+				cacheControl: `public, max-age=31536000, immutable`,
+				contentDisposition: `inline; filename="${file.name}"`
 			});
 
 		}
@@ -151,15 +181,9 @@ const settingService = {
 
 
 
-	async physicsDeleteAll(c) {
-		await emailService.physicsDeleteAll(c);
-		await accountService.physicsDeleteAll(c);
-		await userService.physicsDeleteAll(c);
-	},
-
 	async websiteConfig(c) {
 
-		const settingRow = await this.get(c)
+		const settingRow = await this.get(c, true)
 
 		return {
 			register: settingRow.register,
@@ -174,7 +198,7 @@ const settingService = {
 			siteKey: settingRow.siteKey,
 			background: settingRow.background,
 			loginOpacity: settingRow.loginOpacity,
-			domainList:settingRow.domainList,
+			domainList: settingRow.domainList,
 			regKey: settingRow.regKey,
 			regVerifyOpen: settingRow.regVerifyOpen,
 			addVerifyOpen: settingRow.addVerifyOpen,

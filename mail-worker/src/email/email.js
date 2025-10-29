@@ -12,6 +12,8 @@ import utc from 'dayjs/plugin/utc';
 import timezone from 'dayjs/plugin/timezone';
 import roleService from '../service/role-service';
 import verifyUtils from '../utils/verify-utils';
+import r2Service from '../service/r2-service';
+import userService from '../service/user-service';
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -33,6 +35,7 @@ export async function email(message, env, ctx) {
 		} = await settingService.query({ env });
 
 		if (receive === settingConst.receive.CLOSE) {
+			message.setReject('Service suspended');
 			return;
 		}
 
@@ -51,18 +54,33 @@ export async function email(message, env, ctx) {
 		const account = await accountService.selectByEmailIncludeDel({ env: env }, message.to);
 
 		if (!account && noRecipient === settingConst.noRecipient.CLOSE) {
+			message.setReject('Recipient not found');
 			return;
 		}
 
-		if (account && account.email !== env.admin) {
+		let userRow = {}
+
+		if (account) {
+			 userRow = await userService.selectById({ env: env }, account.userId);
+		}
+
+		if (account && userRow.email !== env.admin) {
 
 			let { banEmail, banEmailType, availDomain } = await roleService.selectByUserId({ env: env }, account.userId);
 
-			if(!roleService.hasAvailDomainPerm(availDomain, message.to)) {
+			if (!roleService.hasAvailDomainPerm(availDomain, message.to)) {
+				message.setReject('Mailbox disabled');
 				return;
 			}
 
 			banEmail = banEmail.split(',').filter(item => item !== '');
+
+
+			if (banEmail.includes('*')) {
+
+				if (!banEmailHandler(banEmailType, message, email)) return;
+
+			}
 
 			for (const item of banEmail) {
 
@@ -73,13 +91,7 @@ export async function email(message, env, ctx) {
 
 					if (banDomain === receiveDomain) {
 
-						if (banEmailType === roleConst.banEmailType.ALL) return;
-
-						if (banEmailType === roleConst.banEmailType.CONTENT) {
-							email.html = 'The content has been deleted';
-							email.text = 'The content has been deleted';
-							email.attachments = [];
-						}
+						if (!banEmailHandler(banEmailType, message, email)) return;
 
 					}
 
@@ -87,13 +99,7 @@ export async function email(message, env, ctx) {
 
 					if (item.toLowerCase() === email.from.address.toLowerCase()) {
 
-						if (banEmailType === roleConst.banEmailType.ALL) return;
-
-						if (banEmailType === roleConst.banEmailType.CONTENT) {
-							email.html = 'The content has been deleted';
-							email.text = 'The content has been deleted';
-							email.attachments = [];
-						}
+						if (!banEmailHandler(banEmailType, message, email)) return;
 
 					}
 
@@ -101,6 +107,11 @@ export async function email(message, env, ctx) {
 
 			}
 
+		}
+
+
+		if (!email.to) {
+			email.to = [{ address: message.to, name: emailUtils.getName(message.to)}]
 		}
 
 		const toName = email.to.find(item => item.address === message.to)?.name || '';
@@ -146,8 +157,12 @@ export async function email(message, env, ctx) {
 			attachment.accountId = emailRow.accountId;
 		});
 
-		if (attachments.length > 0 && env.r2) {
-			await attService.addAtt({ env }, attachments);
+		try {
+			if (attachments.length > 0 && await r2Service.hasOSS({ env })) {
+				await attService.addAtt({ env }, attachments);
+			}
+		} catch (e) {
+			console.error(e);
 		}
 
 		emailRow = await emailService.completeReceive({ env }, account ? emailConst.status.RECEIVE : emailConst.status.NOONE, emailRow.emailId);
@@ -234,4 +249,21 @@ ${params.text || emailUtils.htmlToText(params.content) || ''}
 
 		console.error('邮件接收异常: ', e);
 	}
+}
+
+function banEmailHandler(banEmailType, message, email) {
+
+	if (banEmailType === roleConst.banEmailType.ALL) {
+		message.setReject('Mailbox disabled');
+		return false;
+	}
+
+	if (banEmailType === roleConst.banEmailType.CONTENT) {
+		email.html = 'The content has been deleted';
+		email.text = 'The content has been deleted';
+		email.attachments = [];
+	}
+
+	return true;
+
 }

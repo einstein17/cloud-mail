@@ -9,7 +9,7 @@
         <el-menu-item @click="router.push({name: 'email'})" index="email"
                       :class="route.meta.name === 'email' ? 'choose-item' : ''">
           <Icon icon="hugeicons:mailbox-01" width="20" height="20" />
-          <span class="menu-name" style="margin-left: 21px">{{$t('inbox')}}</span>
+          <span class="menu-name" style="margin-left: 21px">{{$t('收件箱')}}</span>
         </el-menu-item>
         <el-menu-item @click="router.push({name: 'send'})" index="send" v-perm="'email:send'"
                       :class="route.meta.name === 'send' ? 'choose-item' : ''">
@@ -31,7 +31,7 @@
           <Icon icon="fluent:settings-48-regular" width="20" height="20" />
           <span class="menu-name" style="margin-left: 21px">{{$t('settings')}}</span>
         </el-menu-item>
-        <div class="manage-title" v-perm="['user:query','role:query','setting:query','analysis:query','reg-key:query']">
+        <div class="manage-title" v-perm="['all-email:query','user:query','role:query','setting:query','analysis:query','reg-key:query']">
           <div>{{$t('manage')}}</div>
         </div>
         <el-menu-item @click="router.push({name: 'analysis'})" index="analysis" v-perm="'analysis:query'"
@@ -143,42 +143,28 @@ const route = useRoute();
 
 
 :deep(.el-scrollbar__wrap--hidden-default ) {
-  background: #001529 !important;
+  background: var(--aside-backgound) !important;
 }
 
 :deep(.el-menu-item) {
-  background: #001529;
+  background: var(--aside-backgound);
 }
 
 :deep(.el-menu) {
-  background: #001529;
+  background: var(--aside-backgound);
 }
 
 .el-menu {
   border-right: 0;
-  width: 250px;
-  @media (max-width: 1199px) {
-    width: 250px;
-  }
+  width: 260px;
 }
 
 :deep(.el-divider__text) {
-  background: #001529;
+  background: var(--aside-backgound);
   color: #FFFFFF;
 }
 
 .scroll {
 
-}
-
-.github {
-  position: absolute;
-  width: 100%;
-  bottom: 10px;
-  display: flex;
-  justify-content: center;
-  a{
-    color: #fff;
-  }
 }
 </style>
