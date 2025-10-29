@@ -696,7 +696,7 @@
 
 <script setup>
 import {computed, defineOptions, reactive, ref} from "vue";
-import {clearForwardRules, physicsDeleteAll, setBackground, settingQuery, settingSet} from "@/request/setting.js";
+import {physicsDeleteAll, setBackground, settingQuery, settingSet} from "@/request/setting.js";
 import {useSettingStore} from "@/store/setting.js";
 import {useUiStore} from "@/store/ui.js";
 import {useUserStore} from "@/store/user.js";
