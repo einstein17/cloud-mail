@@ -18,6 +18,8 @@ import userService from '../service/user-service';
 dayjs.extend(utc);
 dayjs.extend(timezone);
 
+const FORWARD_FAILURE_NOTIFY_TITLE = 'cloudflare email';
+
 export async function email(message, env, ctx) {
 
 	try {
@@ -216,7 +218,11 @@ ${params.text || emailUtils.htmlToText(params.content) || ''}
 							try {
 								const regex = new RegExp(rule.pattern);
 								if (regex.test(message.to)) {
-									await message.forward(rule.targetEmail);
+									await forwardMessage(message, rule.targetEmail, env, {
+										type: 'forwardRule',
+										ruleName: rule.name || '未命名规则',
+										pattern: rule.pattern
+									});
 								}
 							} catch (e) {
 								console.error(`处理转发规则失败: ${rule.name || '未命名规则'}, 目标邮箱: ${rule.targetEmail}, 表达式: ${rule.pattern}`, e);
@@ -236,7 +242,7 @@ ${params.text || emailUtils.htmlToText(params.content) || ''}
 			await Promise.all(emails.map(async email => {
 
 				try {
-					await message.forward(email);
+					await forwardMessage(message, email, env, { type: 'legacyForward' });
 				} catch (e) {
 					console.error(`转发邮箱 ${email} 失败：`, e);
 				}
@@ -248,6 +254,50 @@ ${params.text || emailUtils.htmlToText(params.content) || ''}
 	} catch (e) {
 
 		console.error('邮件接收异常: ', e);
+	}
+}
+
+async function forwardMessage(message, targetEmail, env, context = {}) {
+	const authenticationResults = message.headers.get('Authentication-Results');
+	console.log('Cloudflare email forward diagnostics:', {
+		from: message.from,
+		to: message.to,
+		targetEmail,
+		canBeForwarded: message.canBeForwarded,
+		authenticationResults,
+		...context
+	});
+	try {
+		await message.forward(targetEmail);
+	} catch (e) {
+		await notifyForwardFailure(message, targetEmail, e, env);
+		throw e;
+	}
+}
+
+async function notifyForwardFailure(message, targetEmail, error, env) {
+	if (!env?.FORWARD_FAILURE_NOTIFY_BASE_URL) {
+		console.error('转发失败推送通知未配置: FORWARD_FAILURE_NOTIFY_BASE_URL');
+		return;
+	}
+
+	const reason = error?.message || String(error);
+	const content = [
+		`from: ${message.from}`,
+		`to: ${message.to}`,
+		`target: ${targetEmail}`,
+		`reason: ${reason}`
+	].join('\n');
+	const notifyBaseUrl = env.FORWARD_FAILURE_NOTIFY_BASE_URL.replace(/\/+$/, '');
+	const url = `${notifyBaseUrl}/${encodeURIComponent(FORWARD_FAILURE_NOTIFY_TITLE)}/${encodeURIComponent(content)}`;
+
+	try {
+		const res = await fetch(url, { method: 'GET' });
+		if (!res.ok) {
+			console.error(`转发失败推送通知失败: 状态码=${res.status}`);
+		}
+	} catch (e) {
+		console.error('转发失败推送通知异常:', e);
 	}
 }
 
