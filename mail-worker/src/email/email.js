@@ -19,6 +19,8 @@ dayjs.extend(utc);
 dayjs.extend(timezone);
 
 const FORWARD_FAILURE_NOTIFY_TITLE = 'cloudflare email';
+const FORWARD_MAX_ATTEMPTS = 3;
+const FORWARD_RETRY_BASE_DELAY = 1000;
 
 export async function email(message, env, ctx) {
 
@@ -267,12 +269,22 @@ async function forwardMessage(message, targetEmail, env, context = {}) {
 		authenticationResults,
 		...context
 	});
-	try {
-		await message.forward(targetEmail);
-	} catch (e) {
-		await notifyForwardFailure(message, targetEmail, e, env);
-		throw e;
+	let lastError;
+	for (let attempt = 1; attempt <= FORWARD_MAX_ATTEMPTS; attempt++) {
+		try {
+			await message.forward(targetEmail);
+			return;
+		} catch (e) {
+			lastError = e;
+			console.error(`转发失败 (尝试 ${attempt}/${FORWARD_MAX_ATTEMPTS}): target=${targetEmail}`, e);
+			if (attempt < FORWARD_MAX_ATTEMPTS) {
+				const delay = FORWARD_RETRY_BASE_DELAY * Math.pow(2, attempt - 1);
+				await new Promise(resolve => setTimeout(resolve, delay));
+			}
+		}
 	}
+	await notifyForwardFailure(message, targetEmail, lastError, env);
+	throw lastError;
 }
 
 async function notifyForwardFailure(message, targetEmail, error, env) {
