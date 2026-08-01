@@ -85,6 +85,7 @@ const zh = {
     changePerm: '修改权限',
     from: '发件人',
     subject: '主题',
+    emailContent: '正文',
     sender: '发件人',
     user: '用户',
     searchByContent: '输入内容查询',

@@ -85,6 +85,7 @@ const en = {
     changePerm: 'Change Role',
     from: 'From',
     subject: 'Subject',
+    emailContent: 'Content',
     sender: 'Sender',
     user: 'User',
     searchByContent: 'Enter text to search',
